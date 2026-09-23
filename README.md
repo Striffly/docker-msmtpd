@@ -5,7 +5,10 @@ A small SMTP relay built on [msmtpd](https://marlam.de/msmtp/). Containers hand 
 This is a fork of [crazy-max/docker-msmtpd](https://github.com/crazy-max/docker-msmtpd) (MIT), rebuilt to be maintained the way the [bwgc images](https://github.com/Striffly/bwgc_backup) are:
 
 - **msmtp comes from Alpine's signed packages**, not from a source tarball downloaded without a checksum. A fixed msmtp, OpenSSL or musl reaches the image through the next rebuild.
-- **Rebuilt every day when needed**: whenever the `alpine` base or any installed package falls behind (`rebuild-on-updates.yml`). An issue is opened before the pinned Alpine branch leaves support (`check-base-image-support.yml`).
+- **Kept current without anyone's help**:
+  - the image follows the current Alpine 3 branch, rebuilt every day when the base or any installed package falls behind (`rebuild-on-updates.yml`);
+  - the actions in the workflows are pinned by commit, and Dependabot proposes each new release once it is 3 days old;
+  - its pull request is merged on its own once the image builds and passes its tests.
 - **Tested before every publish**: `tests/run.sh` relays mail end to end through STARTTLS and a login, reads credentials from files, and must see a wrong password refused.
 - **Scanned and signed**: Trivy, then cosign keyless signing.
 - **Tagged per build**: `master`, plus `master-YYYYMMDD-HHmmss`, which never moves.

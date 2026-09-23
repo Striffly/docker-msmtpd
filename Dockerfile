@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# Pinned to an Alpine branch rather than :latest. The branch's security fixes
-# reach the image through the daily rebuild (rebuild-on-updates.yml); moving to
-# the next branch is a deliberate change, which check-base-image-support.yml
-# raises before the pinned one leaves support.
-FROM alpine:3.24
+# The current Alpine 3 branch. The daily rebuild (rebuild-on-updates.yml) picks
+# up its security fixes and, when Alpine releases a new branch, moves to it on
+# its own: a branch never has to be bumped by hand before it leaves support.
+# Every build must pass tests/run.sh before it is published, and hosts can hold
+# a new image back for a while before installing it.
+FROM alpine:3
 
 # msmtp and msmtpd come from Alpine's signed packages instead of a source
 # tarball fetched without a checksum, so a fixed msmtp, OpenSSL or libc arrives
