@@ -1,0 +1,6 @@
+rules:
+  # Dependabot waits 3 days before proposing a release, the delay the images
+  # get on the hosts, instead of zizmor's default of 7.
+  dependabot-cooldown:
+    config:
+      days: 3
