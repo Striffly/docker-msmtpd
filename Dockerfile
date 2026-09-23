@@ -1,58 +1,30 @@
 # syntax=docker/dockerfile:1
 
-ARG MSMTP_VERSION=1.8.34
-ARG ALPINE_VERSION=3.24
-ARG XX_VERSION=1.9.0
+# Pinned to an Alpine branch rather than :latest. The branch's security fixes
+# reach the image through the daily rebuild (rebuild-on-updates.yml); moving to
+# the next branch is a deliberate change, which check-base-image-support.yml
+# raises before the pinned one leaves support.
+FROM alpine:3.24
 
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS base
-COPY --from=xx / /
-RUN apk --update --no-cache add clang curl file lld make musl-dev pkgconfig tar xz
-ARG MSMTP_VERSION
-WORKDIR /src
-RUN curl -sSL "https://marlam.de/msmtp/releases/msmtp-$MSMTP_VERSION.tar.xz" | tar xJv --strip 1
+# msmtp and msmtpd come from Alpine's signed packages instead of a source
+# tarball fetched without a checksum, so a fixed msmtp, OpenSSL or libc arrives
+# with the next rebuild. No init system: msmtpd is the only process.
+RUN apk add --no-cache ca-certificates msmtp tzdata \
+  && addgroup -g 1500 msmtpd \
+  && adduser -D -H -u 1500 -G msmtpd -s /sbin/nologin msmtpd \
+  && install -d -o msmtpd -g msmtpd -m 0700 /run/msmtpd
 
-FROM base AS builder
-ARG TARGETPLATFORM
-RUN xx-apk --no-cache --no-scripts add g++ gettext-dev gnutls-dev libidn2-dev
-RUN <<EOT
-  set -ex
-  CC=xx-clang CXX=xx-clang++ ./configure --host=$(xx-clang --print-target-triple) --prefix=/usr --sysconfdir=/etc --localstatedir=/var
-  make -j$(nproc)
-  make install
-  xx-verify /usr/bin/msmtp
-  xx-verify /usr/bin/msmtpd
-  file /usr/bin/msmtpd
-EOT
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
-FROM crazymax/alpine-s6:${ALPINE_VERSION}-2.2.0.3
+ENV LISTEN_PORT=2500 \
+  TZ=UTC
 
-ENV S6_BEHAVIOUR_IF_STAGE2_FAILS="2" \
-  TZ="UTC" \
-  PUID="1500" \
-  PGID="1500" \
-  LISTEN_PORT="2500"
-
-RUN apk --update --no-cache add \
-    bash \
-    ca-certificates \
-    gettext \
-    gnutls \
-    libidn2 \
-    libgsasl \
-    libsecret \
-    mailx \
-    shadow \
-    tzdata \
-  && ln -sf /usr/bin/msmtp /usr/sbin/sendmail \
-  && addgroup -g ${PGID} msmtpd \
-  && adduser -D -H -u ${PUID} -G msmtpd -s /bin/sh msmtpd \
-  && rm -rf /tmp/*
-
-COPY --from=builder /usr/bin/msmtp* /usr/bin/
-COPY rootfs /
-
+# Never root: the relay only needs its own configuration directory.
+USER 1500:1500
 EXPOSE 2500
 
-HEALTHCHECK --interval=10s --timeout=5s \
-  CMD netstat -ltn | grep -q ":${LISTEN_PORT}[[:space:]].*LISTEN" || exit 1
+# A real SMTP greeting from the relay, not just an open port.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD msmtp -C /dev/null --host=127.0.0.1 --port="$LISTEN_PORT" --tls=off --auth=off --serverinfo > /dev/null || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
