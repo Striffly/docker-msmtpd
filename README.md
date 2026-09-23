@@ -1,93 +1,38 @@
-<p align="center"><a href="https://github.com/crazy-max/docker-msmtpd" target="_blank"><img height="128" src="https://raw.githubusercontent.com/crazy-max/docker-msmtpd/master/.github/docker-msmtpd.jpg"></a></p>
+# msmtpd SMTP relay
 
-<p align="center">
-  <a href="https://hub.docker.com/r/crazymax/msmtpd/tags?page=1&ordering=last_updated"><img src="https://img.shields.io/github/v/tag/crazy-max/docker-msmtpd?label=version&style=flat-square" alt="Latest Version"></a>
-  <a href="https://github.com/crazy-max/docker-msmtpd/actions?workflow=build"><img src="https://img.shields.io/github/actions/workflow/status/crazy-max/docker-msmtpd/build.yml?branch=master&label=build&logo=github&style=flat-square" alt="Build Status"></a>
-  <a href="https://hub.docker.com/r/crazymax/msmtpd/"><img src="https://img.shields.io/docker/stars/crazymax/msmtpd.svg?style=flat-square&logo=docker" alt="Docker Stars"></a>
-  <a href="https://hub.docker.com/r/crazymax/msmtpd/"><img src="https://img.shields.io/docker/pulls/crazymax/msmtpd.svg?style=flat-square&logo=docker" alt="Docker Pulls"></a>
-  <br /><a href="https://github.com/sponsors/crazy-max"><img src="https://img.shields.io/badge/sponsor-crazy--max-181717.svg?logo=github&style=flat-square" alt="Become a sponsor"></a>
-  <a href="https://www.paypal.me/crazyws"><img src="https://img.shields.io/badge/donate-paypal-00457c.svg?logo=paypal&style=flat-square" alt="Donate Paypal"></a>
-</p>
+A small SMTP relay built on [msmtpd](https://marlam.de/msmtp/). Containers hand their mail to it, without credentials, on port 2500. It sends the mail on through one real SMTP account, so only this container holds the SMTP password.
 
-## About
+This is a fork of [crazy-max/docker-msmtpd](https://github.com/crazy-max/docker-msmtpd) (MIT), rebuilt to be maintained the way the [bwgc images](https://github.com/Striffly/bwgc_backup) are:
 
-Lightweight SMTP relay using [msmtpd](https://marlam.de/msmtp/) as a Docker
-image.
+- **msmtp comes from Alpine's signed packages**, not from a source tarball downloaded without a checksum. A fixed msmtp, OpenSSL or musl reaches the image through the next rebuild.
+- **Kept current without anyone's help**:
+  - the image follows the current Alpine 3 branch, rebuilt every day when the base or any installed package falls behind (`rebuild-on-updates.yml`);
+  - the actions in the workflows are pinned by commit, and Dependabot proposes each new release once it is 3 days old;
+  - its pull request is merged on its own once the image builds and passes its tests.
+- **Tested before every publish**: `tests/run.sh` relays mail end to end through STARTTLS and a login, reads credentials from files, and must see a wrong password refused.
+- **Scanned and signed**: Trivy, then cosign keyless signing.
+- **Tagged per build**: `master`, plus `master-YYYYMMDD-HHmmss`, which never moves.
+- **Simpler at runtime**: no s6 init and never root. It runs as uid 1500 and writes only `/run/msmtpd`. The password is kept byte for byte in its own private file, so quotes, backslashes, `$` or spaces in it need no escaping.
 
-> [!TIP] 
-> Want to be notified of new releases? Check out 🔔 [Diun (Docker Image Update Notifier)](https://github.com/crazy-max/diun)
-> project!
-
-___
-
-* [Features](#features)
-* [Build locally](#build-locally)
-* [Image](#image)
-* [Environment variables](#environment-variables)
-* [Ports](#ports)
-* [Usage](#usage)
-  * [Docker Compose](#docker-compose)
-  * [Kubernetes](#kubernetes)
-  * [Command line](#command-line)
-* [Upgrade](#upgrade)
-* [Contributing](#contributing)
-* [License](#license)
-
-## Features
-
-* Run as non-root user
-* Latest [msmtp/msmtpd](https://marlam.de/msmtp/) release compiled from source
-* Bind to [unprivileged port](#ports)
-* Multi-platform image
-
-## Build locally
-
-```shell
-git clone https://github.com/crazy-max/docker-msmtpd.git
-cd docker-msmtpd
-
-# Build image and output to docker (default)
-docker buildx bake
-
-# Build multi-platform image
-docker buildx bake image-all
-```
+`PUID` and `PGID` are gone: the relay writes no file outside the container. The other variables are unchanged, and `SMTP_SECURITY` is new.
 
 ## Image
 
-| Registry                                                                                          | Image                      |
-|---------------------------------------------------------------------------------------------------|----------------------------|
-| [Docker Hub](https://hub.docker.com/r/crazymax/msmtpd/)                                           | `crazymax/msmtpd`          |
-| [GitHub Container Registry](https://github.com/users/crazy-max/packages/container/package/msmtpd) | `ghcr.io/crazy-max/msmtpd` |
-
-Following platforms for this image are available:
-
-```
-$ docker buildx imagetools inspect crazymax/msmtpd --format "{{json .Manifest}}" | \
-  jq -r '.manifests[] | select(.platform.os != null and .platform.os != "unknown") | .platform | "\(.os)/\(.architecture)\(if .variant then "/" + .variant else "" end)"'
-
-linux/amd64
-linux/arm/v6
-linux/arm/v7
-linux/arm64
-linux/ppc64le
-linux/s390x
-```
+`ghcr.io/striffly/docker-msmtpd:master`, or a dated tag to pin one build. Only `linux/amd64` is built.
 
 ## Environment variables
 
-* `TZ`: Timezone assigned to the container (default `UTC`)
-* `PUID`: Daemon user id (default `1500`)
-* `PGID`: Daemon group id (default `1500`)
+* `TZ`: Timezone (default `UTC`)
 * `LISTEN_PORT`: Container listen port for msmtpd, useful with host, macvlan, or ipvlan networking (default `2500`)
 * `SMTP_HOST`: SMTP relay server to send the mail to. **required**
 * `SMTP_PORT`: Port that the SMTP relay server listens on. Default `25` or `465` if TLS.
+* `SMTP_SECURITY`: `starttls`, `force_tls` or `off`, as vaultwarden reads them: sets `SMTP_TLS` and `SMTP_STARTTLS` together. Either of those, when set, wins.
 * `SMTP_TLS`: Enable or disable TLS (also known as SSL) for secured connections (`on` or `off`).
 * `SMTP_STARTTLS`: Start TLS from within the session (`on`, default), or tunnel the session through TLS (`off`).
 * `SMTP_TLS_CHECKCERT`: Enable or disable checks of the server certificate (`on` or `off`). They are enabled by default.
-* `SMTP_AUTH`: Enable or disable authentication and optionally [choose a method](https://marlam.de/msmtp/msmtp.html#Authentication-commands) to use. The argument `on` chooses a method automatically.
-* `SMTP_USER`: Set the username for authentication. Authentication must be activated with the `SMTP_AUTH` env var.
-* `SMTP_PASSWORD`: Set the password for authentication. Authentication must be activated with the `SMTP_AUTH` env var.
+* `SMTP_AUTH`: Enable or disable authentication and optionally [choose a method](https://marlam.de/msmtp/msmtp.html#Authentication-commands) to use. The argument `on` chooses a method automatically. Defaults to `on` when `SMTP_USER` is set.
+* `SMTP_USER`: Set the username for authentication. 
+* `SMTP_PASSWORD`: Set the password for authentication. 
 * `SMTP_DOMAIN`: Argument of the `SMTP EHLO` command (default `localhost`)
 * `SMTP_FROM`: Set the envelope-from address. Supported substitution patterns can be found [here](https://marlam.de/msmtp/msmtp.html#Commands-specific-to-sendmail-mode).
 * `SMTP_FROM_FULL_NAME`: Set the full name to use in the From header when msmtp adds one.
@@ -103,62 +48,25 @@ linux/s390x
 > `SMTP_USER_FILE` and `SMTP_PASSWORD_FILE` can be used to fill in the value
 > from a file, especially for Docker's secrets feature.
 
-> [!NOTE]
-> More info: https://marlam.de/msmtp/msmtp.html
+More info: https://marlam.de/msmtp/msmtp.html
 
 ## Ports
 
-* `2500`: SMTP relay port, configurable through `LISTEN_PORT`
+* `2500`: SMTP relay port, configurable through `LISTEN_PORT`. The relay asks for no login, so keep it on an internal network: never publish this port.
 
 ## Usage
 
-### Docker Compose
+See [examples/compose](examples/compose/compose.yml). A client sends to host `msmtpd`, port `2500`, without TLS or authentication.
 
-Docker compose is the recommended way to run this image. You can use the following
-[docker compose template](examples/compose/compose.yml), then run the container:
+## Tests
 
-```bash
-docker compose up -d
-docker compose logs -f
+```sh
+bash tests/run.sh            # builds msmtpd:test, then tests it
+bash tests/run.sh <image>    # tests an existing image
 ```
 
-### Kubernetes
-
-To install on a Kubernetes cluster, you can use the following
-[kubernetes deployment template](examples/kubernetes/deployment.yaml), then create the deployment:
-
-```bash
-kubectl apply -f deployment.yaml
-```
-
-### Command line
-
-You can also use the following minimal command:
-
-```bash
-$ docker run -d -p 2500:2500 --name msmtpd \
-  -e "SMTP_HOST=smtp.example.com" \
-  crazymax/msmtpd
-```
-
-## Upgrade
-
-Recreate the container whenever I push an update:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-## Contributing
-
-Want to contribute? Awesome! The most basic way to show your support is to star
-the project, or to raise issues. You can also support this project by [**becoming a sponsor on GitHub**](https://github.com/sponsors/crazy-max)
-or by making a [PayPal donation](https://www.paypal.me/crazyws) to ensure this
-journey continues indefinitely!
-
-Thanks again for your support, it is much appreciated! :pray:
+It needs Docker and `axllent/mailpit`, and removes only the containers and network it creates.
 
 ## License
 
-MIT. See `LICENSE` for more details.
+MIT. See `LICENSE`, originally by CrazyMax.
