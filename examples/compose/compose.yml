@@ -2,25 +2,17 @@ name: msmtpd
 
 services:
   msmtpd:
-    image: crazymax/msmtpd
+    image: ghcr.io/striffly/docker-msmtpd:master
     container_name: msmtpd
-    ports:
-      - target: 2500
-        published: 2500
-        protocol: tcp
+    # No published port: other containers on this network send to msmtpd:2500.
     environment:
       - "TZ=Europe/Paris"
-      - "PUID=1500"
-      - "PGID=1500"
       - "SMTP_HOST=smtp.gmail.com"
       - "SMTP_PORT=587"
-      - "SMTP_TLS=on"
-      - "SMTP_STARTTLS=on"
-      - "SMTP_TLS_CHECKCERT=on"
-      - "SMTP_AUTH=on"
+      - "SMTP_SECURITY=starttls"
       - "SMTP_USER_FILE=/run/secrets/smtp_user"
       - "SMTP_PASSWORD_FILE=/run/secrets/smtp_password"
-      - "SMTP_DOMAIN=localhost"
+      - "SMTP_FROM=foo@example.com"
     secrets:
       - smtp_user
       - smtp_password
@@ -28,6 +20,6 @@ services:
 
 secrets:
   smtp_user:
-    external: true
+    file: ./smtp_user
   smtp_password:
-    external: true
+    file: ./smtp_password

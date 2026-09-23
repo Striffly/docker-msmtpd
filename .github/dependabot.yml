@@ -4,8 +4,21 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    # A release waits a week before it is proposed, so a compromised one has
+    # time to be noticed and pulled.
     cooldown:
-      default-days: 2
+      default-days: 7
+    labels:
+      - "kind/dependencies"
+      - "bot"
+  # The pinned Alpine branch. A new branch comes as a pull request to review;
+  # fixes within the branch arrive through the daily rebuild instead.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
     labels:
       - "kind/dependencies"
       - "bot"
