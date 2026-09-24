@@ -147,22 +147,3 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}
-
-  # Dependabot's pull requests update the pinned actions. Each one waits 3 days
-  # after its release (cooldown in dependabot.yml), the same delay as the
-  # images, and is merged only once the build and the tests above passed in
-  # this same run. The pull request's author, not the actor, identifies
-  # Dependabot: anyone re-running a job becomes its actor.
-  merge-dependabot:
-    needs: build
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Merge the pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --squash "$PR_URL"

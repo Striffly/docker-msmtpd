@@ -1,0 +1,55 @@
+name: Merge Dependabot pull requests
+
+# Dependabot's pull requests update the pinned actions. Each one waits 3 days
+# after its release (cooldown in dependabot.yml), the same delay as the
+# images, and is merged only once "Docker build image" built and tested it.
+#
+# This lives apart from build-docker-image.yml because that workflow is also
+# called by rebuild-on-updates.yml, and a called workflow may not declare more
+# permissions than its caller grants -- even for a job its `if` would skip.
+# Kept there, this job's write access made every scheduled rebuild fail to
+# start.
+#
+# workflow_run runs with a write token, so nothing from the pull request is
+# checked out or executed here: the job only reads the pull request through
+# the API and merges the exact commit that was tested.
+
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no pull request code is checked out or run
+    workflows: [ "Docker build image" ]
+    types: [ completed ]
+
+permissions: {}
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request attached to this run."
+            exit 0
+          fi
+          # The pull request's author, not the run's actor, identifies
+          # Dependabot: anyone re-running a job becomes its actor.
+          AUTHOR=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq .user.login)
+          if [ "$AUTHOR" != "dependabot[bot]" ]; then
+            echo "Pull request #$PR_NUMBER is by $AUTHOR, not Dependabot; leaving it."
+            exit 0
+          fi
+          # Refuses if a commit was pushed after the one that was tested.
+          gh pr merge "$PR_NUMBER" --squash --match-head-commit "$HEAD_SHA"
